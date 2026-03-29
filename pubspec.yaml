@@ -1,9 +1,9 @@
 name: flutter_agentic_ai
 description: "Embed intelligent, UI-aware AI agents in any Flutter app. Autonomous tap, type, scroll, and navigation using Flutter's semantics tree."
-version: 0.1.2
-homepage: "https://github.com/mohamedsalah/mobileai"
-repository: "https://github.com/mohamedsalah/mobileai"
-issue_tracker: "https://github.com/mohamedsalah/mobileai/issues"
+version: 0.1.3
+homepage: "https://github.com/mohamed2m2018/flutter_agentic_ai"
+repository: "https://github.com/mohamed2m2018/flutter_agentic_ai"
+issue_tracker: "https://github.com/mohamed2m2018/flutter_agentic_ai/issues"
 
 environment:
   sdk: ^3.11.4
