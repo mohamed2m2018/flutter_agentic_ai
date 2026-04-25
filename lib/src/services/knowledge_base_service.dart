@@ -5,11 +5,6 @@ const int _defaultMaxTokens = 2000;
 const int _charsPerToken = 4;
 const int _defaultPriority = 5;
 
-// Interface for custom generic retrieval
-abstract class KnowledgeRetriever {
-  Future<List<KnowledgeEntry>> retrieve(String query, String screenName);
-}
-
 class KnowledgeBaseService {
   late final KnowledgeRetriever _retriever;
   late final int _maxChars;

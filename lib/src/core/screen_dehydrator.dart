@@ -1,16 +1,39 @@
 import 'types.dart';
 
-/// ScreenDehydrator converts discovering interactive elements into 
-/// a textual representation that the LLM can understand.
+/// ScreenDehydrator converts the discovered widget-tree state into the
+/// RN-style textual screen representation expected by the synced prompt.
 class ScreenDehydrator {
-  /// Converts the list of interactive elements into a prompt string.
-  /// Format: [index] Label (type) - properties
+  static const Set<String> _internalOnlyProperties = <String>{
+    'actionIndex',
+    'bounds',
+  };
+
+  static const List<String> _propertyOrder = <String>[
+    'id',
+    'parentId',
+    'scrollHostId',
+    'key',
+    'widgetType',
+    'role',
+    'tooltip',
+    'orientation',
+    'value',
+    'checked',
+    'selected',
+    'enabled',
+    'disabled',
+    'hint',
+    'placeholder',
+  ];
+
+  /// Converts interactive elements into the RN-style prompt format:
+  /// `[index]<type attrs>Label />`
+  /// Visible non-interactive text is emitted as plain text lines.
   static String dehydrate(List<InteractiveElement> elements) {
     if (elements.isEmpty) {
-      return "No interactive elements detected on this screen.";
+      return 'No interactive elements detected on this screen.';
     }
 
-    // Sort: high priority first, then normal priority
     final sortedElements = List<InteractiveElement>.from(elements)
       ..sort((a, b) {
         if (a.aiPriority == AiPriority.high && b.aiPriority != AiPriority.high) {
@@ -19,34 +42,162 @@ class ScreenDehydrator {
         if (a.aiPriority != AiPriority.high && b.aiPriority == AiPriority.high) {
           return 1;
         }
+        final aIsScrollable = a.type == ElementType.scrollable;
+        final bIsScrollable = b.type == ElementType.scrollable;
+        if (aIsScrollable != bIsScrollable) {
+          return aIsScrollable ? 1 : -1;
+        }
         return a.index.compareTo(b.index);
       });
 
-    final buffer = StringBuffer();
-
-    for (var element in sortedElements) {
-      final typeString = _formatElementType(element.type);
-      buffer.write('[${element.index}] ${element.label} ($typeString)');
-
-      if (element.properties.isNotEmpty) {
-        final propsList = element.properties.entries
-            .where((e) => e.value != null && e.value.toString().isNotEmpty)
-            .map((e) => '${e.key}: ${e.value}')
-            .join(', ');
-        if (propsList.isNotEmpty) {
-           buffer.write(' - { $propsList }');
+    final interactiveLines = <String>[];
+    final visibleContent = <String>[];
+    final visibleContentSeen = <String>{};
+    for (final element in sortedElements) {
+      if (element.type == ElementType.text) {
+        if (visibleContentSeen.add(element.label)) {
+          visibleContent.add(element.label);
         }
+        continue;
       }
-      buffer.writeln();
+
+      final typeString = _formatElementType(element.type);
+      final attrs = _formatAttributes(element.properties);
+      interactiveLines.add('[${element.index}]<$typeString$attrs>${element.label} />');
     }
 
-    return buffer.toString().trim();
+    if (interactiveLines.isEmpty && visibleContent.isEmpty) {
+      return 'No interactive elements detected on this screen.';
+    }
+
+    final sections = <String>[];
+    if (interactiveLines.isNotEmpty) {
+      sections.add(interactiveLines.join('\n'));
+    }
+    if (visibleContent.isNotEmpty) {
+      sections.add(
+        'Visible Content:\n${visibleContent.take(16).map((text) => '- $text').join('\n')}',
+      );
+    }
+
+    return sections.join('\n\n').trim();
+  }
+
+  /// Summarizes currently active control state in a generic, app-agnostic way.
+  /// This helps the model reason about constrained views without adding
+  /// domain-specific hints.
+  static String summarizeActiveState(List<InteractiveElement> elements) {
+    final lines = <String>[];
+
+    for (final element in elements) {
+      if (element.type == ElementType.text) {
+        continue;
+      }
+
+      final stateFragments = <String>[];
+      final orderedKeys = _orderedPropertyKeys(element.properties);
+      for (final key in orderedKeys) {
+        final value = element.properties[key];
+        if (!_isInterestingStateProperty(key, value)) {
+          continue;
+        }
+        stateFragments.add('$key="${_stringifyAttributeValue(value)}"');
+      }
+
+      if (stateFragments.isEmpty) {
+        continue;
+      }
+
+      lines.add(
+        '- <${_formatElementType(element.type)}> ${element.label} | ${stateFragments.join(' | ')}',
+      );
+    }
+
+    if (lines.isEmpty) {
+      return '';
+    }
+
+    return 'Active UI State:\n${lines.join('\n')}';
+  }
+
+  static String _formatAttributes(Map<String, dynamic> properties) {
+    final buffer = StringBuffer();
+    for (final key in _orderedPropertyKeys(properties)) {
+      final value = properties[key];
+      if (!_shouldSurfaceProperty(key, value)) {
+        continue;
+      }
+      buffer.write(' $key="${_stringifyAttributeValue(value)}"');
+    }
+    return buffer.toString();
+  }
+
+  static Iterable<String> _orderedPropertyKeys(Map<String, dynamic> properties) {
+    final seen = <String>{};
+    final ordered = <String>[];
+
+    for (final key in _propertyOrder) {
+      if (properties.containsKey(key)) {
+        ordered.add(key);
+        seen.add(key);
+      }
+    }
+
+    final remaining = properties.keys
+        .where((key) => !seen.contains(key))
+        .toList(growable: false)
+      ..sort();
+    ordered.addAll(remaining);
+    return ordered;
+  }
+
+  static bool _shouldSurfaceProperty(String key, Object? value) {
+    if (_internalOnlyProperties.contains(key) || value == null) {
+      return false;
+    }
+    final normalized = _stringifyAttributeValue(value);
+    return normalized.isNotEmpty;
+  }
+
+  static bool _isInterestingStateProperty(String key, Object? value) {
+    if (!_shouldSurfaceProperty(key, value)) {
+      return false;
+    }
+
+    switch (key) {
+      case 'id':
+      case 'parentId':
+      case 'scrollHostId':
+      case 'key':
+      case 'widgetType':
+      case 'tooltip':
+      case 'orientation':
+        return false;
+      case 'value':
+      case 'checked':
+      case 'selected':
+      case 'disabled':
+        return true;
+      case 'enabled':
+        return value == false;
+      case 'hint':
+      case 'placeholder':
+      case 'role':
+        return false;
+      default:
+        return true;
+    }
+  }
+
+  static String _stringifyAttributeValue(Object value) {
+    final text = value is String ? value : value.toString();
+    return text.replaceAll('"', r'\"').trim();
   }
 
   static String _formatElementType(ElementType type) {
     switch (type) {
       case ElementType.pressable:
-        return 'button';
+        return 'pressable';
       case ElementType.textInput:
         return 'text-input';
       case ElementType.switchToggle:

@@ -39,7 +39,7 @@ class ZoneRegistry {
       case ZoneAction.simplify:
         return zone.config.allowSimplify;
       case ZoneAction.card:
-        return false; // To be implemented
+        return zone.config.allowInjectBlock || zone.config.allowInjectCard;
     }
   }
 }

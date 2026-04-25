@@ -1,17 +1,33 @@
-# example
+# ShopFlow Example
 
-A new Flutter project.
+This example app now mirrors the same MobileAI configuration pattern used in FeedYum:
 
-## Getting Started
+- hosted text proxy: `EXPO_PUBLIC_MOBILEAI_BASE_URL/api/v1/hosted-proxy/text`
+- hosted voice proxy: `ws(s)://.../ws/hosted-proxy/voice`
+- `enableVoice: true`
+- `debug: true`
+- telemetry via `EXPO_PUBLIC_MOBILEAI_KEY`
+- route-aware `screenMap`
 
-This project is a starting point for a Flutter application.
+## Run
 
-A few resources to get you started if this is your first Flutter project:
+Use Flutter dart-defines with the same env names FeedYum uses:
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+```bash
+cd example
+flutter run --dart-define=EXPO_PUBLIC_MOBILEAI_KEY=your_mobileai_key --dart-define=GEMINI_API_KEY=your_gemini_key
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+By default the sample talks to `https://mobileai.cloud`. For local backend
+development, put the localhost override in `.env`:
+
+```bash
+flutter run --dart-define-from-file=.env
+```
+
+## Notes
+
+- The sample defaults `EXPO_PUBLIC_MOBILEAI_BASE_URL` to `https://mobileai.cloud`.
+- Use `.env` to override `EXPO_PUBLIC_MOBILEAI_BASE_URL` to `http://localhost:3001` for local development.
+- `GEMINI_API_KEY` remains available as a direct-provider fallback for local development.
+- The example uses a manual `screenMap` in [/Users/mohamedsalah/mobileai-suite-copy/mobileai-flutter/example/lib/ai_screen_map.dart](/Users/mohamedsalah/mobileai-suite-copy/mobileai-flutter/example/lib/ai_screen_map.dart).

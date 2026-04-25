@@ -4,21 +4,21 @@ import '../core/action_registry.dart';
 
 /// A declarative widget to register custom AI actions in the Widget tree.
 /// Actions are registered on mount and unregistered on unmount.
-class AiAction extends StatefulWidget {
+class AIAction extends StatefulWidget {
   final ActionDefinition action;
   final Widget child;
 
-  const AiAction({
+  const AIAction({
     super.key,
     required this.action,
     required this.child,
   });
 
   @override
-  State<AiAction> createState() => _AiActionState();
+  State<AIAction> createState() => _AIActionState();
 }
 
-class _AiActionState extends State<AiAction> {
+class _AIActionState extends State<AIAction> {
   @override
   void initState() {
     super.initState();
@@ -26,7 +26,7 @@ class _AiActionState extends State<AiAction> {
   }
 
   @override
-  void didUpdateWidget(AiAction oldWidget) {
+  void didUpdateWidget(AIAction oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.action.name != widget.action.name) {
       actionRegistry.unregister(oldWidget.action.name);
@@ -48,3 +48,6 @@ class _AiActionState extends State<AiAction> {
     return widget.child;
   }
 }
+
+@Deprecated('Use AIAction instead.')
+typedef AiAction = AIAction;

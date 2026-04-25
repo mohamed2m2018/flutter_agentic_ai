@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_agentic_ai/flutter_agentic_ai.dart';
 import 'screens/home_screen.dart';
 import 'screens/cart_screen.dart';
 import 'screens/search_screen.dart';
@@ -10,6 +9,12 @@ import 'screens/product_detail_screen.dart';
 import 'screens/checkout_screen.dart';
 import 'screens/profile_settings_screen.dart';
 import 'screens/reviews_screen.dart';
+import 'screens/notification_preferences_screen.dart';
+import 'screens/notification_channels_screen.dart';
+import 'screens/quiet_hours_screen.dart';
+import 'screens/quiet_hours_rules_screen.dart';
+import 'screens/quiet_hours_schedule_screen.dart';
+import 'screens/quiet_hours_review_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -80,6 +85,30 @@ final router = GoRouter(
     GoRoute(
       path: '/profile/settings',
       builder: (context, state) => const ProfileSettingsScreen(),
+    ),
+    GoRoute(
+      path: '/profile/settings/notifications',
+      builder: (context, state) => const NotificationPreferencesScreen(),
+    ),
+    GoRoute(
+      path: '/profile/settings/notifications/channels',
+      builder: (context, state) => const NotificationChannelsScreen(),
+    ),
+    GoRoute(
+      path: '/profile/settings/notifications/channels/quiet-hours',
+      builder: (context, state) => const QuietHoursScreen(),
+    ),
+    GoRoute(
+      path: '/profile/settings/notifications/channels/quiet-hours/windows',
+      builder: (context, state) => const QuietHoursRulesScreen(),
+    ),
+    GoRoute(
+      path: '/profile/settings/notifications/channels/quiet-hours/windows/schedule',
+      builder: (context, state) => const QuietHoursScheduleScreen(),
+    ),
+    GoRoute(
+      path: '/profile/settings/notifications/channels/quiet-hours/windows/schedule/review',
+      builder: (context, state) => const QuietHoursReviewScreen(),
     ),
   ],
 );

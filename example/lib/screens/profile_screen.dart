@@ -13,7 +13,6 @@ class ProfileScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () => context.push('/profile/settings'),
-            tooltip: 'Settings',
           )
         ],
       ),
@@ -56,7 +55,11 @@ class ProfileScreen extends StatelessWidget {
               _MenuItem(icon: Icons.person_outline, title: 'Personal Information', onTap: () => context.push('/profile/settings')),
               _MenuItem(icon: Icons.location_on_outlined, title: 'Shipping Addresses', onTap: () => _showNotImplemented(context)),
               _MenuItem(icon: Icons.payment, title: 'Payment Methods', onTap: () => _showNotImplemented(context)),
-              _MenuItem(icon: Icons.notifications_outlined, title: 'Notifications', onTap: () => _showNotImplemented(context)),
+              _MenuItem(
+                icon: Icons.notifications_outlined,
+                title: 'Notifications',
+                onTap: () => context.push('/profile/settings/notifications'),
+              ),
             ],
           ),
           _buildMenuSection(

@@ -32,10 +32,11 @@ final productDetailProvider = FutureProvider.family<Product, String>((ref, produ
 final searchProvider = FutureProvider.family<List<Product>, String>((ref, query) async {
   await _mockNetworkDelay(700);
   if (query.isEmpty) return SeedData.products;
-  return SeedData.products.where((p) => 
-    p.name.toLowerCase().contains(query.toLowerCase()) || 
-    p.description.toLowerCase().contains(query.toLowerCase())
-  ).toList();
+  final normalizedQuery = query.trim().toLowerCase();
+  return SeedData.products.where((product) {
+    final haystack = '${product.name} ${product.description}'.toLowerCase();
+    return haystack.contains(normalizedQuery);
+  }).toList(growable: false);
 });
 
 // Reviews Pagination Mock

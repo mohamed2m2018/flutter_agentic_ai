@@ -1,6 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import '../core/types.dart';
+import 'ai_approval_dialog.dart';
+import 'ai_consent_dialog.dart';
+import 'rich_content_renderer.dart';
 
 /// AgentChatBar — Floating, draggable, compressible chat widget.
 /// Mirrors react-native-agentic-ai's AgentChatBar component fully:
@@ -13,38 +19,97 @@ class AgentChatBar extends StatefulWidget {
   final void Function(String) onSend;
   final bool isThinking;
   final ExecutionResult? lastResult;
+  final List<AiMessage> messages;
+  final List<AiMessage> humanMessages;
+  final List<ConversationSummary> conversations;
+  final bool isLoadingHistory;
+  final void Function(String conversationId)? onConversationSelect;
+  final VoidCallback? onNewConversation;
   final String language;
   final VoidCallback? onDismiss;
   final VoidCallback? onCancel;
   final AgentChatBarTheme? theme;
+  final InteractionMode mode;
+  final List<InteractionMode> availableModes;
+  final ValueChanged<InteractionMode>? onModeChanged;
+  final bool isVoiceConnected;
+  final bool isMicMuted;
+  final bool isSpeakerMuted;
+  final bool isAISpeaking;
+  final VoidCallback? onToggleVoiceConnection;
+  final VoidCallback? onToggleMic;
+  final VoidCallback? onToggleSpeaker;
+  final String? activeSupportLabel;
+  final bool consentVisible;
+  final String? consentProviderName;
+  final AIConsentConfig? consentConfig;
+  final VoidCallback? onConsentAccept;
+  final VoidCallback? onConsentDecline;
+  final bool approvalVisible;
+  final AskUserRequest? approvalRequest;
+  final VoidCallback? onApprovalAccept;
+  final VoidCallback? onApprovalDecline;
+  final bool awaitingUserResponse;
 
   const AgentChatBar({
     super.key,
     required this.onSend,
     required this.isThinking,
     this.lastResult,
+    this.messages = const [],
+    this.humanMessages = const [],
+    this.conversations = const [],
+    this.isLoadingHistory = false,
+    this.onConversationSelect,
+    this.onNewConversation,
     this.language = 'en',
     this.onDismiss,
     this.onCancel,
     this.theme,
+    this.mode = InteractionMode.text,
+    this.availableModes = const [InteractionMode.text],
+    this.onModeChanged,
+    this.isVoiceConnected = false,
+    this.isMicMuted = false,
+    this.isSpeakerMuted = false,
+    this.isAISpeaking = false,
+    this.onToggleVoiceConnection,
+    this.onToggleMic,
+    this.onToggleSpeaker,
+    this.activeSupportLabel,
+    this.consentVisible = false,
+    this.consentProviderName,
+    this.consentConfig,
+    this.onConsentAccept,
+    this.onConsentDecline,
+    this.approvalVisible = false,
+    this.approvalRequest,
+    this.onApprovalAccept,
+    this.onApprovalDecline,
+    this.awaitingUserResponse = false,
   });
 
   @override
   State<AgentChatBar> createState() => _AgentChatBarState();
 }
 
-class _AgentChatBarState extends State<AgentChatBar> with SingleTickerProviderStateMixin {
+class _AgentChatBarState extends State<AgentChatBar>
+    with SingleTickerProviderStateMixin {
   bool _isExpanded = false;
+  bool _showHistory = false;
   final TextEditingController _textController = TextEditingController();
+  final ScrollController _transcriptScrollController = ScrollController();
   late Offset _position;
   bool _initialized = false;
   double _keyboardOffset = 0;
 
   // Default colors (matching RN exactly)
   static const _bg = Color(0xF21A1A2E);
+  static const _fabBg = Color(0xFF1A1A2E);
   static const _accent = Color(0xFF7B68EE);
 
   Color get _primaryColor => widget.theme?.primaryColor ?? _accent;
+  Color get _fabColor => widget.theme?.primaryColor ?? _fabBg;
   Color get _backgroundColor => widget.theme?.backgroundColor ?? _bg;
 
   @override
@@ -63,14 +128,52 @@ class _AgentChatBarState extends State<AgentChatBar> with SingleTickerProviderSt
   }
 
   @override
+  void didUpdateWidget(covariant AgentChatBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.consentVisible && !oldWidget.consentVisible && !_isExpanded) {
+      setState(() => _isExpanded = true);
+    }
+    final transcriptChanged =
+        widget.mode != oldWidget.mode ||
+        widget.messages.length != oldWidget.messages.length ||
+        widget.humanMessages.length != oldWidget.humanMessages.length ||
+        widget.consentVisible != oldWidget.consentVisible ||
+        widget.isThinking != oldWidget.isThinking;
+    if (transcriptChanged) {
+      unawaited(_scrollTranscriptToEnd());
+    }
+  }
+
+  @override
   void dispose() {
     _textController.dispose();
+    _transcriptScrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _scrollTranscriptToEnd() async {
+    await SchedulerBinding.instance.endOfFrame;
+    if (!mounted) return;
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+    if (!_transcriptScrollController.hasClients) return;
+    final position = _transcriptScrollController.position;
+    final target = position.maxScrollExtent;
+    if (!target.isFinite) return;
+    _transcriptScrollController.jumpTo(target);
+    if (!_transcriptScrollController.hasClients) return;
+    final settledTarget = _transcriptScrollController.position.maxScrollExtent;
+    if (!settledTarget.isFinite) return;
+    await _transcriptScrollController.animateTo(
+      settledTarget,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+    );
   }
 
   void _handleSend() {
     final text = _textController.text.trim();
-    if (text.isNotEmpty && !widget.isThinking) {
+    final canSend = !widget.isThinking || widget.awaitingUserResponse;
+    if (text.isNotEmpty && canSend) {
       widget.onSend(text);
       _textController.clear();
     }
@@ -85,18 +188,29 @@ class _AgentChatBarState extends State<AgentChatBar> with SingleTickerProviderSt
       left: _isExpanded
           ? (MediaQuery.of(context).size.width - 340) / 2
           : _position.dx.clamp(0, MediaQuery.of(context).size.width - 70),
-      top: (_isExpanded
-              ? _position.dy.clamp(100, MediaQuery.of(context).size.height - 400)
-              : _position.dy.clamp(0, MediaQuery.of(context).size.height - 80)) -
+      top:
+          (_isExpanded
+              ? _position.dy.clamp(
+                  100,
+                  MediaQuery.of(context).size.height - 400,
+                )
+              : _position.dy.clamp(
+                  0,
+                  MediaQuery.of(context).size.height - 80,
+                )) -
           _keyboardOffset,
       child: GestureDetector(
         onPanUpdate: (details) {
           setState(() {
             _position = Offset(
               (_position.dx + details.delta.dx).clamp(
-                  0, MediaQuery.of(context).size.width - (_isExpanded ? 340 : 70)),
+                0,
+                MediaQuery.of(context).size.width - (_isExpanded ? 340 : 70),
+              ),
               (_position.dy + details.delta.dy).clamp(
-                  0, MediaQuery.of(context).size.height - (_isExpanded ? 300 : 80)),
+                0,
+                MediaQuery.of(context).size.height - (_isExpanded ? 300 : 80),
+              ),
             );
           });
         },
@@ -127,12 +241,12 @@ class _AgentChatBarState extends State<AgentChatBar> with SingleTickerProviderSt
         width: 60,
         height: 60,
         decoration: BoxDecoration(
-          color: _primaryColor,
+          color: _fabColor,
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 12,
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 6,
               offset: const Offset(0, 4),
             ),
           ],
@@ -148,6 +262,9 @@ class _AgentChatBarState extends State<AgentChatBar> with SingleTickerProviderSt
 
   Widget _buildExpanded() {
     final isArabic = widget.language == 'ar';
+    final transcriptMessages = widget.mode == InteractionMode.human
+        ? widget.humanMessages
+        : widget.messages;
     return Container(
       key: const ValueKey('expanded'),
       width: 340,
@@ -167,31 +284,221 @@ class _AgentChatBarState extends State<AgentChatBar> with SingleTickerProviderSt
         mainAxisSize: MainAxisSize.min,
         children: [
           _buildDragHandle(),
-          if (widget.lastResult != null) _buildResultBubble(isArabic),
-          _buildTextInputRow(isArabic),
+          if (_showHistory)
+            _buildHistoryPanel()
+          else ...[
+            if (widget.availableModes.length > 1) _buildModeTabs(),
+            if (transcriptMessages.isNotEmpty)
+              _buildTranscript(isArabic, transcriptMessages),
+            if (transcriptMessages.isEmpty &&
+                widget.lastResult != null &&
+                widget.mode != InteractionMode.human)
+              _buildResultBubble(isArabic),
+            if (widget.consentVisible &&
+                widget.consentConfig != null &&
+                widget.consentProviderName != null)
+              AIConsentInlineCard(
+                providerName: widget.consentProviderName!,
+                config: widget.consentConfig!,
+                onAccept: widget.onConsentAccept ?? () {},
+                onDecline: widget.onConsentDecline ?? () {},
+              ),
+            if (widget.approvalVisible)
+              AIApprovalInlineCard(
+                request: widget.approvalRequest,
+                onGrant: widget.onApprovalAccept ?? () {},
+                onDeny: widget.onApprovalDecline ?? () {},
+              ),
+            if (widget.mode == InteractionMode.voice && !widget.approvalVisible)
+              _buildVoiceControlsRow(isArabic),
+            if (widget.mode != InteractionMode.voice)
+              _buildTextInputRow(isArabic),
+          ],
         ],
       ),
     );
   }
 
+  Widget _buildModeTabs() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: widget.availableModes
+            .map((mode) {
+              final selected = mode == widget.mode;
+              final dotColor = switch (mode) {
+                InteractionMode.text => const Color(0xFF7B68EE),
+                InteractionMode.voice => const Color(0xFF34C759),
+                InteractionMode.human => const Color(0xFFFF9500),
+              };
+              return Expanded(
+                child: GestureDetector(
+                  onTap: widget.onModeChanged == null
+                      ? null
+                      : () => widget.onModeChanged!(mode),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? Colors.white.withValues(alpha: 0.15)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (selected) ...[
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: dotColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Text(
+                          switch (mode) {
+                            InteractionMode.text => 'Text',
+                            InteractionMode.voice => 'Voice',
+                            InteractionMode.human => 'Human',
+                          },
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: (widget.theme?.textColor ?? Colors.white)
+                                .withValues(alpha: selected ? 1 : 0.5),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            })
+            .toList(growable: false),
+      ),
+    );
+  }
+
   Widget _buildDragHandle() {
+    final showHistoryActions =
+        (widget.onConversationSelect != null ||
+            widget.onNewConversation != null) &&
+        !_showHistory;
     return Row(
       children: [
-        const Expanded(
-          child: Center(
-            child: _DragGrip(),
-          ),
-        ),
+        if (showHistoryActions)
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: _buildHistoryActions(),
+          )
+        else
+          const SizedBox(width: 48),
+        const Expanded(child: Center(child: _DragGrip())),
         GestureDetector(
-          onTap: () => setState(() => _isExpanded = false),
+          onTap: () => setState(() {
+            _isExpanded = false;
+            _showHistory = false;
+          }),
           child: const Padding(
             padding: EdgeInsets.all(8),
             child: Text(
               '—',
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildHistoryActions() {
+    final count = widget.conversations.length;
+    return Row(
+      children: [
+        GestureDetector(
+          onTap: widget.onConversationSelect == null
+              ? null
+              : () => setState(() => _showHistory = true),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+                child: Icon(
+                  Icons.history_rounded,
+                  size: 18,
+                  color: Colors.white.withValues(alpha: 0.72),
+                ),
+              ),
+              if (count > 0)
+                Positioned(
+                  right: -4,
+                  top: -4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _primaryColor,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      count > 9 ? '9+' : '$count',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (widget.onNewConversation != null) ...[
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: widget.onNewConversation,
+            child: Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              ),
+              child: const Center(
+                child: Text(
+                  '+',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -244,52 +551,526 @@ class _AgentChatBarState extends State<AgentChatBar> with SingleTickerProviderSt
     );
   }
 
+  Widget _buildTranscript(bool isArabic, List<AiMessage> messages) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      constraints: const BoxConstraints(maxHeight: 280),
+      child: SingleChildScrollView(
+        controller: _transcriptScrollController,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: messages
+              .map((message) {
+                final isUser = message.role == 'user';
+                final bubbleColor = isUser
+                    ? _primaryColor.withValues(alpha: 0.34)
+                    : Colors.white.withValues(alpha: 0.1);
+
+                return Align(
+                  alignment: isUser
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 260),
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: bubbleColor,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: isUser
+                        ? Text(
+                            richContentToPlainText(message.content).trim(),
+                            style: TextStyle(
+                              color: widget.theme?.textColor ?? Colors.white,
+                              fontSize: 14,
+                              height: 1.4,
+                            ),
+                            textAlign: isArabic
+                                ? TextAlign.right
+                                : TextAlign.left,
+                          )
+                        : DefaultTextStyle(
+                            style: TextStyle(
+                              color: widget.theme?.textColor ?? Colors.white,
+                              fontSize: 14,
+                              height: 1.4,
+                            ),
+                            child: RichContentRenderer(
+                              content: message.content,
+                            ),
+                          ),
+                  ),
+                );
+              })
+              .toList(growable: false),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHistoryPanel() {
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(maxHeight: 320),
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () => setState(() => _showHistory = false),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.close_rounded,
+                        size: 14,
+                        color: Color(0xFF7B68EE),
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        'Back',
+                        style: TextStyle(
+                          color: Color(0xFF7B68EE),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const Expanded(
+                child: Center(
+                  child: Text(
+                    'History',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: widget.onNewConversation == null
+                    ? null
+                    : () {
+                        widget.onNewConversation?.call();
+                        setState(() => _showHistory = false);
+                      },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.edit_rounded,
+                        size: 14,
+                        color: Color(0xFF7B68EE),
+                      ),
+                      SizedBox(width: 5),
+                      Text(
+                        'New',
+                        style: TextStyle(
+                          color: Color(0xFF7B68EE),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (widget.isLoadingHistory && widget.conversations.isEmpty)
+            ...List<Widget>.generate(
+              3,
+              (_) => Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 140,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: 90,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (!widget.isLoadingHistory && widget.conversations.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Column(
+                children: const [
+                  Icon(Icons.history_rounded, size: 34, color: Colors.white38),
+                  SizedBox(height: 10),
+                  Text(
+                    'No previous conversations',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Your AI conversations will appear here',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white60,
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (widget.conversations.isNotEmpty)
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: widget.conversations
+                      .map(
+                        (conversation) => GestureDetector(
+                          onTap: widget.onConversationSelect == null
+                              ? null
+                              : () {
+                                  widget.onConversationSelect?.call(
+                                    conversation.id,
+                                  );
+                                  setState(() => _showHistory = false);
+                                },
+                          child: Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.06),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        conversation.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _primaryColor.withValues(
+                                          alpha: 0.22,
+                                        ),
+                                        borderRadius: BorderRadius.circular(
+                                          999,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '${conversation.messageCount}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  conversation.preview.isEmpty
+                                      ? 'No messages'
+                                      : conversation.preview,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _formatRelativeDate(conversation.updatedAt),
+                                  style: const TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _formatRelativeDate(int timestamp) {
+    final now = DateTime.now();
+    final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
+    final diff = now.difference(date);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+    if (diff.inDays < 1) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildVoiceControlsRow(bool isArabic) {
+    final isConnecting = !widget.isVoiceConnected;
+    final isMicActive = widget.isVoiceConnected && !widget.isMicMuted;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        _buildAudioControlButton(
+          isActive: widget.isSpeakerMuted,
+          onTap: widget.onToggleSpeaker,
+          child: Icon(
+            widget.isSpeakerMuted
+                ? Icons.volume_off_rounded
+                : Icons.volume_up_rounded,
+            size: 18,
+            color: widget.theme?.textColor ?? Colors.white,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: GestureDetector(
+            onTap: isConnecting
+                ? null
+                : () {
+                    if (isMicActive) {
+                      widget.onToggleVoiceConnection?.call();
+                    } else {
+                      widget.onToggleMic?.call();
+                    }
+                  },
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 180),
+              opacity: isConnecting ? 0.7 : 1,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: widget.isAISpeaking
+                      ? const Color(0xFF34C759).withValues(alpha: 0.3)
+                      : isMicActive
+                      ? const Color(0xFFFF3B30).withValues(alpha: 0.3)
+                      : isConnecting
+                      ? const Color(0xFFFFCC00).withValues(alpha: 0.2)
+                      : Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: Center(
+                        child: isConnecting
+                            ? _LoadingDots(
+                                color: widget.theme?.textColor ?? Colors.white,
+                              )
+                            : Icon(
+                                widget.isAISpeaking
+                                    ? Icons.volume_up_rounded
+                                    : isMicActive
+                                    ? Icons.stop_rounded
+                                    : Icons.mic_rounded,
+                                size: 18,
+                                color: widget.theme?.textColor ?? Colors.white,
+                              ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      isConnecting
+                          ? (isArabic ? 'جاري الاتصال...' : 'Connecting...')
+                          : widget.isAISpeaking
+                          ? (isArabic ? 'يتحدث...' : 'Speaking...')
+                          : isMicActive
+                          ? (isArabic ? 'إيقاف' : 'Stop')
+                          : (isArabic ? 'تحدث' : 'Talk'),
+                      style: TextStyle(
+                        color: widget.theme?.textColor ?? Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          width: 10,
+          height: 10,
+          margin: const EdgeInsets.only(bottom: 17),
+          decoration: BoxDecoration(
+            color: widget.isVoiceConnected
+                ? const Color(0xFF34C759)
+                : const Color(0xFFFFCC00),
+            shape: BoxShape.circle,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAudioControlButton({
+    required bool isActive,
+    required VoidCallback? onTap,
+    required Widget child,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: 36,
+        margin: const EdgeInsets.only(bottom: 6),
+        decoration: BoxDecoration(
+          color: isActive
+              ? const Color.fromRGBO(255, 100, 100, 0.2)
+              : Colors.white.withValues(alpha: 0.1),
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: child,
+      ),
+    );
+  }
+
   Widget _buildTextInputRow(bool isArabic) {
+    final canReplyWhileRunning = widget.awaitingUserResponse;
+    final inputEnabled = !widget.isThinking || canReplyWhileRunning;
+    final showCancel = widget.isThinking && !canReplyWhileRunning;
+    final placeholder = switch (widget.mode) {
+      InteractionMode.text => isArabic ? 'اكتب طلبك...' : 'Ask AI...',
+      InteractionMode.voice => isArabic ? 'أرسل رسالة...' : 'Send a message...',
+      InteractionMode.human =>
+        isArabic ? 'اكتب لفريق الدعم...' : 'Message support...',
+    };
     return Row(
       children: [
         Expanded(
           child: Container(
+            clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            // CupertinoTextField has zero Material/Overlay dependency —
-            // safe to render above MaterialApp in the widget tree.
+            padding: const EdgeInsets.symmetric(horizontal: 14),
             child: CupertinoTextField(
               controller: _textController,
-              enabled: !widget.isThinking,
+              enabled: inputEnabled,
+              enableInteractiveSelection: false,
               textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
               textAlign: isArabic ? TextAlign.right : TextAlign.left,
               onSubmitted: (_) => _handleSend(),
               textInputAction: TextInputAction.send,
+              cursorColor: widget.theme?.textColor ?? Colors.white,
               style: TextStyle(
                 color: widget.theme?.textColor ?? Colors.white,
-                fontSize: 16,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
               ),
-              placeholder: isArabic ? 'اكتب طلبك...' : 'Ask AI...',
+              placeholder: placeholder,
               placeholderStyle: TextStyle(
-                color: (widget.theme?.textColor ?? Colors.white).withValues(alpha: 0.4),
-                fontSize: 16,
+                color: (widget.theme?.textColor ?? Colors.white).withValues(
+                  alpha: 0.4,
+                ),
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
               ),
-              decoration: null, // remove default iOS border — we style the Container
-              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: const BoxDecoration(color: Colors.transparent),
+              padding: const EdgeInsets.symmetric(vertical: 13),
             ),
           ),
         ),
         const SizedBox(width: 8),
         GestureDetector(
-          onTap: widget.isThinking ? widget.onCancel : _handleSend,
+          onTap: showCancel ? widget.onCancel : _handleSend,
           child: Container(
-            width: 40,
-            height: 40,
+            width: 46,
+            height: 46,
             decoration: BoxDecoration(
-              color: widget.isThinking
+              color: showCancel
                   ? Colors.red.withValues(alpha: 0.6)
                   : _primaryColor.withValues(alpha: 0.9),
               shape: BoxShape.circle,
             ),
-            child: widget.isThinking
+            child: showCancel
                 ? const Icon(Icons.stop, size: 18, color: Colors.white)
                 : const Icon(Icons.send_rounded, size: 18, color: Colors.white),
           ),
@@ -321,18 +1102,57 @@ class _DragGrip extends StatelessWidget {
 class _AIBadge extends StatelessWidget {
   const _AIBadge();
 
+  static const double _size = 28;
+
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: Text(
-        '✦',
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 26,
-          fontWeight: FontWeight.bold,
-        ),
+      child: SizedBox(
+        width: _size,
+        height: _size,
+        child: CustomPaint(painter: _AIBadgePainter()),
       ),
     );
+  }
+}
+
+class _AIBadgePainter extends CustomPainter {
+  const _AIBadgePainter();
+
+  static const double _size = 28;
+  static const double _bubbleWidth = _size * 0.6;
+  static const double _bubbleHeight = _size * 0.45;
+  static const double _tailSize = _size * 0.12;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+
+    final left = (size.width - _bubbleWidth) / 2;
+    final top = (size.height - (_bubbleHeight + (_tailSize * 0.5))) / 2;
+    final body = RRect.fromRectAndRadius(
+      Rect.fromLTWH(left, top, _bubbleWidth, _bubbleHeight),
+      const Radius.circular(_size * 0.12),
+    );
+
+    canvas.drawRRect(body, paint);
+
+    final tailLeft = _size * 0.22;
+    final tailTop = size.height - (_size * 0.18) - _tailSize;
+    final tail = Path()
+      ..moveTo(tailLeft, tailTop)
+      ..lineTo(tailLeft, tailTop + _tailSize)
+      ..lineTo(tailLeft + _tailSize, tailTop)
+      ..close();
+
+    canvas.drawPath(tail, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) {
+    return false;
   }
 }
 
@@ -344,14 +1164,17 @@ class _LoadingDots extends StatefulWidget {
   State<_LoadingDots> createState() => _LoadingDotsState();
 }
 
-class _LoadingDotsState extends State<_LoadingDots> with SingleTickerProviderStateMixin {
+class _LoadingDotsState extends State<_LoadingDots>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
-      ..repeat();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
   }
 
   @override
@@ -365,7 +1188,7 @@ class _LoadingDotsState extends State<_LoadingDots> with SingleTickerProviderSta
     return Center(
       child: AnimatedBuilder(
         animation: _controller,
-        builder: (_, ___) {
+        builder: (context, animation) {
           return Row(
             mainAxisSize: MainAxisSize.min,
             children: List.generate(3, (i) {
@@ -373,13 +1196,16 @@ class _LoadingDotsState extends State<_LoadingDots> with SingleTickerProviderSta
               final t = (_controller.value - delay).clamp(0.0, 1.0);
               final opacity = 0.3 + 0.7 * (t < 0.5 ? t * 2 : (1 - t) * 2);
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 1),
                 child: Opacity(
                   opacity: opacity,
                   child: Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle),
+                    width: 4,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: widget.color,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                 ),
               );

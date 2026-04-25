@@ -1,229 +1,433 @@
-# flutter_agentic_ai
+# mobileai_flutter
 
-> Embed intelligent AI agents into any Flutter app — with a single widget.
+Flutter SDK for MobileAI.
 
-[![pub version](https://img.shields.io/pub/v/flutter_agentic_ai.svg)](https://pub.dev/packages/flutter_agentic_ai)
-[![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/mohamed2m2018/flutter_agentic_ai)
-[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+`mobileai_flutter` adds a UI-aware agent to a Flutter app with:
 
-`flutter_agentic_ai` lets users talk to your app in plain language and get things done. The agent navigates, taps, fills forms, and completes multi-step tasks — without you writing any automation code. Works out of the box on any production app with zero widget instrumentation.
+- floating chat UI
+- widget-tree-first screen understanding
+- built-in UI tools like tap, type, scroll, long press, slider, picker, date, and guidance overlays
+- rich chat blocks and `AIZone` screen interventions
+- app-registered actions with `AIAction`
+- app-registered live data sources with `AIData`
+- navigation adapters for `go_router` and `Navigator`
+- consent gating, telemetry, conversation persistence, voice mode, and support mode
 
----
+This package is the standalone Flutter SDK in `mobileai-flutter/`. It is separate from the React Native and web packages.
 
-## ✨ Features
+## Install
 
-- 🤖 **Natural language tasks** — users describe what they want, the agent does it
-- 🗺️ **Autonomous navigation** — seamlessly routes through your app (currently requires `go_router`)
-- 💬 **Floating chat bar** — draggable FAB + expandable panel, ready out of the box
-- 🔄 **Live thinking indicator** — status overlay with cancel support
-- 🛡️ **Security guardrails** — blacklist elements, mask PII, or disable UI control entirely
-- 🌍 **RTL / Arabic support** — full right-to-left layout built in
-- ⚡ **Zero setup** — no native code, no permissions, just wrap your `MaterialApp`
-- 🔌 **Gemini powered** — built-in Gemini provider with proxy URL support for production
-
----
-
-## 🚀 Quick Start
-
-> [!IMPORTANT]
-> **Navigation Requirement**: The autonomous navigation engine currently **requires `go_router`**. If your app uses standard `Navigator` or another routing package, the agent can still tap, type, and scroll, but it will not be able to autonomously route between screens.
-
-### 1. Install
+From pub.dev:
 
 ```yaml
 dependencies:
-  flutter_agentic_ai: ^0.1.0
+  mobileai_flutter: ^0.2.0
 ```
 
-### 2. Wrap your app
+For local development in this monorepo:
+
+```yaml
+dependencies:
+  mobileai_flutter:
+    path: ../mobileai-flutter
+```
+
+Import:
 
 ```dart
-import 'package:flutter_agentic_ai/flutter_agentic_ai.dart';
+import 'package:mobileai_flutter/mobileai_flutter.dart';
+```
 
-// Pass your API key via --dart-define (never hardcode it)
+## Quick Start
+
+Wrap the top-level app widget that owns navigation.
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:mobileai_flutter/mobileai_flutter.dart';
+
+final router = GoRouter(
+  routes: [
+    GoRoute(path: '/', builder: (_, __) => const HomeScreen()),
+    GoRoute(path: '/billing', builder: (_, __) => const BillingScreen()),
+  ],
+);
+
 const apiKey = String.fromEnvironment('GEMINI_API_KEY');
 
-return AiAgent(
-  apiKey: apiKey,
-  router: router,           // your GoRouter instance
-  instructions: 'You are a helpful assistant for MyApp.',
-  accentColor: Colors.deepPurple,
-  onResult: (result) => debugPrint(result.message),
-  child: MaterialApp.router(
-    routerConfig: router,
-    title: 'MyApp',
-  ),
-);
+class AppShell extends StatelessWidget {
+  const AppShell({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return AIAgent(
+      apiKey: apiKey,
+      router: router,
+      instructions: 'You are a helpful assistant for this app.',
+      child: MaterialApp.router(
+        routerConfig: router,
+      ),
+    );
+  }
+}
 ```
 
 Run with:
+
 ```bash
 flutter run --dart-define=GEMINI_API_KEY=your_key_here
 ```
 
----
+For production, prefer `proxyUrl` instead of shipping raw provider keys in the app.
 
-## 📖 `AiAgent` Props
+## What `AIAgent` Supports Today
 
-### Provider
+The main widget in [lib/src/widgets/ai_agent.dart](/Users/mohamedsalah/mobileai-suite-copy/mobileai-flutter/lib/src/widgets/ai_agent.dart) currently exposes:
 
-| Prop | Type | Description |
-|------|------|-------------|
-| `apiKey` | `String?` | Gemini API key. **Dev/prototyping only** — use `proxyUrl` in production. |
-| `provider` | `AiProvider?` | Pre-configured provider instance (takes precedence over `apiKey`). |
-| `proxyUrl` | `String?` | Your backend proxy URL — keeps API keys off the device. |
-| `proxyHeaders` | `Map<String, String>?` | Auth headers to send with proxy requests. |
-| `model` | `String?` | Override the Gemini model (default: `gemini-2.5-flash`). |
+- provider configuration: `apiKey`, `provider`, `proxyUrl`, `proxyHeaders`, `model`
+- navigation integration: `router`, `routerAdapter`, `navigatorKey`, `screenMap`
+- runtime behavior: `maxSteps`, `instructions`, `language`, `interactionMode`, `enableUiControl`
+- UI customization: `theme`, `richUiTheme`, `accentColor`, `showChatBar`
+- lifecycle hooks: `onResult`, `onBeforeStep`, `onAfterStep`, `onStatusUpdate`
+- consent and persistence: `consent`, `conversationPersistenceKey`
+- telemetry: `telemetry`
+- support and voice: `supportMode`, `enableVoice`, `voiceProxyUrl`, `voiceProxyHeaders`
+- screen filtering and transforms: `interactiveBlacklist`, `interactiveWhitelist`, `transformScreenContent`
+- block actions: `blockActionHandlers`
 
-### Behavior
+## Navigation Support
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `maxSteps` | `int` | `15` | Maximum agent steps per task. |
-| `instructions` | `String?` | — | System-level instructions for every interaction. |
-| `router` | `dynamic` | — | `go_router` instance for deep navigation (currently the only supported router). |
-| `language` | `String` | `'en'` | `'en'` or `'ar'` — controls locale and RTL layout. |
-| `maxTokenBudget` | `int?` | — | Auto-stop when token budget is exceeded. |
-| `maxCostUsd` | `double?` | — | Auto-stop when estimated cost exceeds this value. |
-| `debug` | `bool` | `false` | Enable verbose debug logging. |
-
-### Lifecycle Callbacks
-
-| Prop | Type | Description |
-|------|------|-------------|
-| `onResult` | `(ExecutionResult) → void` | Called when the agent finishes a task. |
-| `onBeforeStep` | `(int stepCount) → Future<void>` | Called before each agent step. |
-| `onAfterStep` | `(List<AgentStep>) → Future<void>` | Called after each step. |
-| `onStatusUpdate` | `(String) → void` | Live status text for custom UI integration. |
-
-### Security
-
-| Prop | Type | Description |
-|------|------|-------------|
-| `interactiveBlacklist` | `List<GlobalKey>?` | Elements the AI must **not** interact with. |
-| `interactiveWhitelist` | `List<GlobalKey>?` | If set, AI can **only** interact with these elements. |
-| `transformScreenContent` | `(String) → Future<String>` | Mask PII before the AI sees screen content. |
-| `enableUiControl` | `bool` | `false` for knowledge-only mode. Default: `true`. |
-
-### UI
-
-| Prop | Type | Description |
-|------|------|-------------|
-| `accentColor` | `Color?` | Accent color for FAB and send button. |
-| `theme` | `AgentChatBarTheme?` | Full chat bar theme override. |
-| `showChatBar` | `bool` | Show/hide the floating chat bar. Default: `true`. |
-
----
-
-## 🛡️ Security Guardrails
-
-### Block sensitive UI areas
+### `go_router`
 
 ```dart
-final _paymentKey = GlobalKey();
+AIAgent(
+  apiKey: apiKey,
+  router: router,
+  child: MaterialApp.router(routerConfig: router),
+)
+```
 
-AiAgent(
-  interactiveBlacklist: [_paymentKey],
-  child: Scaffold(
-    body: Container(key: _paymentKey, child: CreditCardForm()),
+`AIAgent` builds the `GoRouterAdapter` internally from `router`. Pass
+`routerAdapter` only when you need to override route catalog or navigation
+behavior.
+
+### Flutter `Navigator`
+
+```dart
+final navigatorKey = GlobalKey<NavigatorState>();
+
+AIAgent(
+  apiKey: apiKey,
+  navigatorKey: navigatorKey,
+  routerAdapter: NavigatorRouterAdapter(
+    navigatorKey: navigatorKey,
+    availableScreens: const ['/', '/billing', '/settings'],
   ),
-);
-```
-
-### Mask PII before the AI sees it
-
-```dart
-AiAgent(
-  transformScreenContent: (content) async {
-    return content
-      .replaceAll(RegExp(r'\b\d{16}\b'), '****-****-****-****')
-      .replaceAll(RegExp(r'[\w.]+@[\w.]+'), '[email]');
-  },
-  child: ...,
-)
-```
-
-### Knowledge-only mode
-
-```dart
-AiAgent(
-  enableUiControl: false,
-  instructions: 'Answer questions about the app only.',
-  child: ...,
-)
-```
-
-### Production proxy
-
-```dart
-AiAgent(
-  proxyUrl: 'https://api.myapp.com/ai',
-  proxyHeaders: {'Authorization': 'Bearer $userToken'},
-  child: ...,
-)
-```
-
-> ⚠️ Using `apiKey` directly in a release build will log a security warning. Use `proxyUrl` in production.
-
----
-
-## 🎨 Custom Theme
-
-```dart
-AiAgent(
-  theme: AgentChatBarTheme(
-    primaryColor: Colors.indigo,
-    backgroundColor: const Color(0xFF1A1A2E),
-    textColor: Colors.white,
+  child: MaterialApp(
+    navigatorKey: navigatorKey,
+    routes: {
+      '/': (_) => const HomeScreen(),
+      '/billing': (_) => const BillingScreen(),
+      '/settings': (_) => const SettingsScreen(),
+    },
   ),
-  child: ...,
 )
 ```
 
----
+Navigation rule: direct agent navigation should only be used for safe top-level destinations. Detail screens that require an item id or prior selection should still be reached by tapping through the UI.
 
-## 🪝 Access the Agent Anywhere
+`screenMap` is a generated hint layer. It can add titles, descriptions, and
+route-chain hints to the prompt, but the live router/adapter remains the source
+of truth for current screen and available routes.
 
-Trigger the agent from any widget in the tree:
+## Built-In Agent Tools
+
+The runtime currently registers these built-in tools:
+
+| Tool | Purpose |
+|------|---------|
+| `tap` | Tap an interactive element |
+| `type` | Enter text into an input |
+| `scroll` | Scroll content |
+| `long_press` | Long-press elements |
+| `adjust_slider` | Set slider values |
+| `select_picker` | Select picker/dropdown values |
+| `set_date` | Set date values |
+| `guide_user` | Show visual highlight guidance |
+| `navigate` | Navigate to safe top-level screens |
+| `wait` | Pause for loading/transitions |
+| `done` | Finish the task with a user-facing reply |
+| `ask_user` | Request clarification, approval, or freeform user input |
+| `query_data` | Query app-registered live data sources |
+| `query_knowledge` | Query the knowledge layer when configured internally |
+| `simplify_zone` | Reduce clutter in an `AIZone` |
+| `restore_zone` | Restore a simplified/injected `AIZone` |
+| `render_block` | Render a registered block into an `AIZone` |
+| `inject_card` | Deprecated alias for `render_block` |
+
+Tool availability can change if you disable UI control, omit data sources, or use support/knowledge-specific runtime paths.
+
+## Custom Actions
+
+Use `AIAction` to expose app-side functions the agent can call directly.
 
 ```dart
-final agent = AiAgentScope.of(context);
+AIAction(
+  action: ActionDefinition(
+    name: 'open_support_chat',
+    description: 'Open the in-app support chat drawer.',
+    parameters: const {},
+    handler: (_) async {
+      debugPrint('Opening support chat');
+      return {'ok': true};
+    },
+  ),
+  child: const HomeScreen(),
+)
+```
+
+## App Data
+
+Use `AIData` to register live app-owned data sources the agent can query with `query_data`.
+
+```dart
+AIData(
+  definition: DataDefinition(
+    name: 'catalog_context',
+    description: 'Returns the featured products shown in the catalog.',
+    handler: (context) async {
+      return {
+        'screen': context.screenName,
+        'featured': [
+          {'name': 'Starter Plan', 'price': '\$29'},
+          {'name': 'Growth Plan', 'price': '\$99'},
+        ],
+      };
+    },
+  ),
+  child: const CatalogScreen(),
+)
+```
+
+`AIData` is the main public path for structured live app data in `0.2.0`.
+
+## Rich Chat UI
+
+Assistant replies can include structured rich content, not just plain strings.
+
+Built-in blocks registered by default:
+
+- `FactCard`
+- `ProductCard`
+- `ActionCard`
+- `ComparisonCard`
+- `FormCard`
+
+Use `RichContentRenderer` in custom surfaces, or let the built-in chat UI render them automatically.
+
+## `AIZone` / Contextual UI
+
+Use `AIZone` to define local surfaces where the agent may simplify content, guide the user, or render a block.
+
+```dart
+AIZone(
+  id: 'pricing-summary',
+  allowSimplify: true,
+  allowInjectBlock: true,
+  interventionEligible: true,
+  proactiveIntervention: false,
+  child: const PricingTable(),
+)
+```
+
+You can also allow custom blocks per zone:
+
+```dart
+AIZone(
+  id: 'checkout-help',
+  allowInjectBlock: true,
+  blocks: [
+    BlockDefinition(
+      name: 'CheckoutHint',
+      allowedPlacements: const [BlockPlacement.zone],
+      builder: (context, props) => Container(
+        padding: const EdgeInsets.all(12),
+        color: const Color(0xFFE8F0FE),
+        child: Text('${props['text'] ?? ''}'),
+      ),
+    ),
+  ],
+  child: const CheckoutScreen(),
+)
+```
+
+## Access the Controller From the Tree
+
+```dart
+final agent = context.ai;
 
 ElevatedButton(
-  onPressed: () => agent.send('Add the first item to cart'),
-  child: const Text('Let AI do it'),
-);
+  onPressed: () => agent.send('Go to billing and explain the current plan'),
+  child: const Text('Ask AI'),
+)
 ```
 
----
+The controller exposes:
 
-## ⚙️ Custom Actions
+- `send(...)`
+- `cancel()`
+- `clearMessages()`
+- `startNewConversation()`
+- `isRunning`
+- `isAwaitingUserResponse`
+- `status`
+- `messages`
+- `lastResult`
 
-Register custom Dart functions the agent can call:
+## Consent
+
+Use `AIConsentConfig` to require explicit user opt-in before the assistant can operate.
 
 ```dart
-actionRegistry.register(AgentAction(
-  name: 'open_support_chat',
-  description: 'Opens the in-app support chat',
-  parameters: {},
-  handler: (_) async {
-    SupportChat.show();
-    return ActionResult(success: true);
-  },
-));
+AIAgent(
+  apiKey: apiKey,
+  consent: const AIConsentConfig(
+    required: true,
+    persist: true,
+    title: 'AI Assistant',
+    providerLabel: 'Google Gemini',
+  ),
+  child: MaterialApp.router(routerConfig: router),
+)
 ```
 
----
+## Telemetry
 
-## 📦 Requirements
+Use `TelemetryConfig` to enable MobileAI analytics.
 
-- Flutter `>=3.0.0`
-- Dart `>=3.0.0`
-- `go_router` (required for autonomous navigation)
-- Gemini API key — get one free at [Google AI Studio](https://aistudio.google.com)
+```dart
+AIAgent(
+  apiKey: apiKey,
+  telemetry: const TelemetryConfig(
+    enabled: true,
+    analyticsKey: 'your_analytics_key',
+    baseUrl: 'https://your-backend.example.com',
+  ),
+  child: MaterialApp.router(routerConfig: router),
+)
+```
 
----
+The package also exports the `MobileAI` static telemetry helpers.
 
-## 📄 License
+## Conversation Persistence
 
-MIT © 2025 MobileAI
+Use `conversationPersistenceKey` to persist and restore conversations across launches.
+
+```dart
+AIAgent(
+  apiKey: apiKey,
+  conversationPersistenceKey: 'main-assistant',
+  child: MaterialApp.router(routerConfig: router),
+)
+```
+
+## Voice and Support Mode
+
+Voice and support mode are available from the public widget surface.
+
+```dart
+AIAgent(
+  apiKey: apiKey,
+  enableVoice: true,
+  supportMode: const SupportModeConfig(
+    enabled: true,
+    supportStyle: 'warm-concise',
+    greetingMessage: 'Hi there! How can I help?',
+  ),
+  child: MaterialApp.router(routerConfig: router),
+)
+```
+
+`SupportModeConfig` also supports:
+
+- `quickReplies`
+- `escalation`
+- `csat`
+- `businessHours`
+- `onRestoreTicket`
+- `onRestoreTranscript`
+- `onSendHumanMessage`
+- `socketUrlBuilder`
+
+## Theming
+
+Two theme layers are available:
+
+- `theme` for the chat shell
+- `richUiTheme` for rich chat blocks and `AIZone` surfaces
+
+```dart
+AIAgent(
+  apiKey: apiKey,
+  theme: const AgentChatBarTheme(
+    primaryColor: Color(0xFF7B68EE),
+  ),
+  richUiTheme: RichUiTheme.defaults(),
+  child: MaterialApp.router(routerConfig: router),
+)
+```
+
+## Provider Setup
+
+The package includes:
+
+- `GeminiProvider`
+- `OpenAIProvider`
+- `createProvider(...)`
+
+Default provider selection in `AIAgent` is:
+
+- Gemini by default
+- OpenAI if `model` contains `gpt`
+- or an explicit custom `provider`
+
+Example:
+
+```dart
+AIAgent(
+  provider: OpenAIProvider(
+    apiKey: const String.fromEnvironment('OPENAI_API_KEY'),
+    modelName: 'gpt-4.1-mini',
+  ),
+  child: MaterialApp.router(routerConfig: router),
+)
+```
+
+## Security Notes
+
+- Prefer `proxyUrl` for production traffic instead of shipping raw provider keys in the app.
+- Use `interactiveBlacklist`, `interactiveWhitelist`, and `transformScreenContent` to protect sensitive UI.
+- Set `enableUiControl: false` for knowledge-only mode.
+- Set `showChatBar: false` if you want a custom trigger/UI around the runtime.
+
+## Current Scope
+
+`mobileai_flutter 0.2.0` now includes the core runtime, navigation adapters, live data registration, rich chat blocks, zones, consent, telemetry, support scaffolding, and voice mode surface.
+
+See [doc/parity-matrix.md](doc/parity-matrix.md) for the subsystem-by-subsystem parity snapshot.
+
+## Example App
+
+The local example app in `/example` demonstrates:
+
+- `go_router` integration
+- floating AI shell
+- route-aware navigation
+- rich replies
+- registered app data sources
+- shopping-style UI traversal
+
+## License
+
+MIT

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 class ProfileSettingsScreen extends StatefulWidget {
   const ProfileSettingsScreen({Key? key}) : super(key: key);
@@ -8,7 +9,6 @@ class ProfileSettingsScreen extends StatefulWidget {
 }
 
 class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
-  bool _pushNotifications = true;
   bool _darkMode = false;
   double _volume = 50;
   DateTime? _birthDate;
@@ -20,11 +20,20 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          SwitchListTile(
-            title: const Text('Push Notifications'),
-            value: _pushNotifications,
-            onChanged: (val) => setState(() => _pushNotifications = val),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const CircleAvatar(
+              backgroundColor: Color(0xFFEDE7F6),
+              child: Icon(Icons.notifications_active, color: Colors.deepPurple),
+            ),
+            title: const Text('Notifications'),
+            subtitle: const Text(
+              'Open the advanced notification lab with channels, quiet hours, and review flows.',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/profile/settings/notifications'),
           ),
+          const SizedBox(height: 16),
           SwitchListTile(
             title: const Text('Dark Mode'),
             value: _darkMode,
@@ -57,10 +66,17 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
               }
             },
           ),
+          const SizedBox(height: 16),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Appearance Preset'),
+            subtitle: const Text('Open a bottom sheet with quick visual presets'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showAppearancePresetSheet(context),
+          ),
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: () {
-              // Sign out logic
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Saved Settings successfully')),
               );
@@ -71,4 +87,51 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       ),
     );
   }
+
+  Future<void> _showAppearancePresetSheet(BuildContext context) {
+    String selected = 'Midnight Contrast';
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Appearance Presets',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'This bottom sheet exists to stress-test the agent on layered UI surfaces.',
+                  ),
+                  const SizedBox(height: 16),
+                  for (final preset in _appearancePresets)
+                    RadioListTile<String>(
+                      value: preset,
+                      groupValue: selected,
+                      title: Text(preset),
+                      onChanged: (value) {
+                        setModalState(() => selected = value!);
+                      },
+                    ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 }
+
+const _appearancePresets = <String>[
+  'Midnight Contrast',
+  'Soft Lavender',
+  'Monochrome Minimal',
+];

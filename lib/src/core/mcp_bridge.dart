@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:flutter_agentic_ai/src/utils/logger.dart';
+import 'package:mobileai_flutter/src/utils/logger.dart';
 
 import 'types.dart';
 import 'agent_runtime.dart'; // To be implemented
