@@ -1,6 +1,6 @@
 name: mobileai_flutter
-description: "MobileAI for Flutter. Embed UI-aware AI agents with chat, rich blocks, zones, navigation, and support workflows."
-version: 0.2.3
+description: "Add an in-app AI support agent to Flutter apps that understands widgets, navigates routes, fills forms, and escalates to humans."
+version: 0.2.4
 homepage: "https://github.com/mobileai/mobileai_flutter"
 repository: "https://github.com/mobileai/mobileai_flutter"
 issue_tracker: "https://github.com/mobileai/mobileai_flutter/issues"

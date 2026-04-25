@@ -1,10 +1,10 @@
-# mobileai_flutter
+# AI Support Agent for Flutter Apps
 
-Flutter SDK for MobileAI Cloud by Twomilia.
+Add an in-app AI support agent that understands your Flutter widget tree, answers user questions, navigates routes, fills forms, resolves tasks, and hands off to a human when needed.
 
-MobileAI Cloud is the product, Twomilia is the company, and `https://mobileai.cloud` is the canonical product domain.
+MobileAI is the SDK and cloud dashboard behind it. The SDK runs inside your app; MobileAI Cloud handles projects, analytics, hosted proxy configuration, and support escalation.
 
-`mobileai_flutter` adds a UI-aware agent to a Flutter app with:
+`mobileai_flutter` adds:
 
 - floating chat UI
 - widget-tree-first screen understanding
@@ -23,7 +23,7 @@ From pub.dev:
 
 ```yaml
 dependencies:
-  mobileai_flutter: ^0.2.3
+  mobileai_flutter: ^0.2.4
 ```
 
 For local development in this monorepo:
@@ -415,7 +415,7 @@ AIAgent(
 
 ## Current Scope
 
-`mobileai_flutter 0.2.3` now includes the core runtime, navigation adapters, live data registration, rich chat blocks, zones, consent, telemetry, support scaffolding, and voice mode surface.
+`mobileai_flutter 0.2.4` now includes the core runtime, navigation adapters, live data registration, rich chat blocks, zones, consent, telemetry, support scaffolding, and voice mode surface.
 
 See [doc/parity-matrix.md](doc/parity-matrix.md) for the subsystem-by-subsystem parity snapshot.
 

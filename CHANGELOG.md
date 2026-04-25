@@ -1,3 +1,8 @@
+## 0.2.4
+
+- Clarified package positioning around the in-app AI support agent for Flutter apps.
+- Refreshed README and pub.dev metadata so the first lines explain what the product does before naming the platform.
+
 ## 0.2.3
 
 - Fixed voice playback/listening sequencing so the microphone pauses while model audio plays and resumes afterward.
