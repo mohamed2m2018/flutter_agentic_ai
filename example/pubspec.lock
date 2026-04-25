@@ -397,7 +397,7 @@ packages:
       path: ".."
       relative: true
     source: path
-    version: "0.2.3"
+    version: "0.2.4"
   native_toolchain_c:
     dependency: transitive
     description:
