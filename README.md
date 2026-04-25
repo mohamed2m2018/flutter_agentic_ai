@@ -1,6 +1,8 @@
 # mobileai_flutter
 
-Flutter SDK for MobileAI.
+Flutter SDK for MobileAI Cloud by Twomilia.
+
+MobileAI Cloud is the product, Twomilia is the company, and `https://mobileai.cloud` is the canonical product domain.
 
 `mobileai_flutter` adds a UI-aware agent to a Flutter app with:
 
@@ -21,7 +23,7 @@ From pub.dev:
 
 ```yaml
 dependencies:
-  mobileai_flutter: ^0.2.0
+  mobileai_flutter: ^0.2.3
 ```
 
 For local development in this monorepo:
@@ -210,7 +212,7 @@ AIData(
 )
 ```
 
-`AIData` is the main public path for structured live app data in `0.2.0`.
+`AIData` is the main public path for structured live app data in `0.2.3`.
 
 ## Rich Chat UI
 
@@ -304,7 +306,7 @@ AIAgent(
 
 ## Telemetry
 
-Use `TelemetryConfig` to enable MobileAI analytics.
+Use `TelemetryConfig` to enable MobileAI Cloud analytics.
 
 ```dart
 AIAgent(
@@ -413,7 +415,7 @@ AIAgent(
 
 ## Current Scope
 
-`mobileai_flutter 0.2.0` now includes the core runtime, navigation adapters, live data registration, rich chat blocks, zones, consent, telemetry, support scaffolding, and voice mode surface.
+`mobileai_flutter 0.2.3` now includes the core runtime, navigation adapters, live data registration, rich chat blocks, zones, consent, telemetry, support scaffolding, and voice mode surface.
 
 See [doc/parity-matrix.md](doc/parity-matrix.md) for the subsystem-by-subsystem parity snapshot.
 
